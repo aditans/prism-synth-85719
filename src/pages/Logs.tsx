@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import {
   ScrollText,
   Search,
@@ -14,7 +16,11 @@ import {
   Info,
   CheckCircle2,
   XCircle,
+  Lock,
+  Unlock,
+  Key,
 } from "lucide-react";
+import { encryptLog, decryptLog, saveEncryptedLog, getEncryptedLogs, clearEncryptedLogs } from "@/lib/crypto";
 import {
   Select,
   SelectContent,
@@ -80,6 +86,11 @@ export default function Logs() {
   const [logs] = useState<LogEntry[]>(mockLogs);
   const [filter, setFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [password, setPassword] = useState("");
+  const [decryptPassword, setDecryptPassword] = useState("");
+  const [isEncrypted, setIsEncrypted] = useState(false);
+  const [decryptedContent, setDecryptedContent] = useState<string>("");
+  const { toast } = useToast();
 
   const getLogIcon = (level: string) => {
     switch (level) {
@@ -107,6 +118,76 @@ export default function Logs() {
       default:
         return "outline";
     }
+  };
+
+  const handleEncryptLogs = () => {
+    if (!password) {
+      toast({
+        title: "Error",
+        description: "Please enter a password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const logsData = JSON.stringify(filteredLogs, null, 2);
+    const encrypted = encryptLog(logsData, password);
+    saveEncryptedLog(encrypted);
+    
+    setIsEncrypted(true);
+    setPassword("");
+    toast({
+      title: "Success",
+      description: "Logs encrypted and saved to cypted folder",
+    });
+  };
+
+  const handleDecryptLogs = () => {
+    if (!decryptPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter the decryption password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const encryptedLogs = getEncryptedLogs();
+    if (encryptedLogs.length === 0) {
+      toast({
+        title: "Error",
+        description: "No encrypted logs found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const latestLog = encryptedLogs[encryptedLogs.length - 1];
+    const decrypted = decryptLog(latestLog, decryptPassword);
+
+    if (decrypted) {
+      setDecryptedContent(decrypted);
+      toast({
+        title: "Success",
+        description: "Logs decrypted successfully",
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: "Incorrect password or corrupted data",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleClearEncrypted = () => {
+    clearEncryptedLogs();
+    setDecryptedContent("");
+    setIsEncrypted(false);
+    toast({
+      title: "Success",
+      description: "Encrypted logs cleared",
+    });
   };
 
   const filteredLogs = logs.filter((log) => {
@@ -197,6 +278,95 @@ export default function Logs() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Encryption Panel */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5" />
+              Encrypt Logs (AES-256)
+            </CardTitle>
+            <CardDescription>
+              Store logs securely in the cypted folder
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="encrypt-password">Encryption Password</Label>
+              <Input
+                id="encrypt-password"
+                type="password"
+                placeholder="Enter encryption password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <Button onClick={handleEncryptLogs} className="w-full">
+              <Lock className="w-4 h-4 mr-2" />
+              Encrypt & Save Logs
+            </Button>
+            {isEncrypted && (
+              <Badge variant="default" className="w-full justify-center">
+                <Key className="w-3 h-3 mr-1" />
+                Logs Encrypted
+              </Badge>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Unlock className="w-5 h-5" />
+              Decrypt Logs
+            </CardTitle>
+            <CardDescription>
+              View encrypted logs from cypted folder
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="decrypt-password">Decryption Password</Label>
+              <Input
+                id="decrypt-password"
+                type="password"
+                placeholder="Enter decryption password"
+                value={decryptPassword}
+                onChange={(e) => setDecryptPassword(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleDecryptLogs} className="flex-1">
+                <Unlock className="w-4 h-4 mr-2" />
+                Decrypt Logs
+              </Button>
+              <Button onClick={handleClearEncrypted} variant="destructive">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Decrypted Content */}
+      {decryptedContent && (
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-success" />
+              Decrypted Logs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px]">
+              <pre className="text-sm p-4 rounded-lg bg-secondary/30">
+                {decryptedContent}
+              </pre>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card className="glass-panel">
