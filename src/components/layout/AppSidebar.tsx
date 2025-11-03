@@ -10,6 +10,7 @@ import {
   Settings,
   Info,
   Home,
+  Lock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +33,7 @@ const navigationItems = [
   { title: "Reports", url: "/reports", icon: FileText },
   { title: "Sandbox", url: "/sandbox", icon: Box },
   { title: "AI Assistant", url: "/ai", icon: Bot },
+  { title: "Encryption Test", url: "/test/encryption", icon: Lock },
   { title: "Logs", url: "/logs", icon: ScrollText },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "About", url: "/about", icon: Info },

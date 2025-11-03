@@ -14,7 +14,11 @@ import AIAssistant from "./pages/AIAssistant";
 import Logs from "./pages/Logs";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
+import EncryptionTest from "./pages/test/encryption";
 import NotFound from "./pages/NotFound";
+import { NmapScanner } from "./pages/tools/NmapScanner";
+import NetworkScanPage from "./pages/NetworkScanPage";
+import { DVWAService } from "./pages/tools/DVWAService";
 
 const queryClient = new QueryClient();
 
@@ -33,9 +37,13 @@ const App = () => (
             <Route path="/reports" element={<Reports />} />
             <Route path="/sandbox" element={<Sandbox />} />
             <Route path="/ai" element={<AIAssistant />} />
+            <Route path="/test/encryption" element={<EncryptionTest />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/about" element={<About />} />
+            <Route path="/tools/nmap" element={<NmapScanner />} />
+            <Route path="/tools/dvwa" element={<DVWAService />} />
+            <Route path="/network-scan" element={<NetworkScanPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
