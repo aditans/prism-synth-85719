@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,8 @@ import {
   Key,
 } from "lucide-react";
 import { encryptLog, decryptLog, saveEncryptedLog, getEncryptedLogs, clearEncryptedLogs } from "@/lib/crypto";
+import type { EncryptedData } from "@/lib/crypto";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -28,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from 'recharts';
 
 interface LogEntry {
   id: string;
@@ -37,53 +40,9 @@ interface LogEntry {
   message: string;
 }
 
-const mockLogs: LogEntry[] = [
-  {
-    id: "1",
-    timestamp: new Date(),
-    level: "info",
-    source: "Nmap",
-    message: "Starting Nmap scan on target 10.0.2.15",
-  },
-  {
-    id: "2",
-    timestamp: new Date(Date.now() - 60000),
-    level: "success",
-    source: "Target Manager",
-    message: "Successfully added new target: dvwa.local",
-  },
-  {
-    id: "3",
-    timestamp: new Date(Date.now() - 120000),
-    level: "warning",
-    source: "Docker",
-    message: "Container DVWA memory usage at 85%",
-  },
-  {
-    id: "4",
-    timestamp: new Date(Date.now() - 180000),
-    level: "error",
-    source: "SQLMap",
-    message: "Connection timeout to target 192.168.1.100",
-  },
-  {
-    id: "5",
-    timestamp: new Date(Date.now() - 240000),
-    level: "info",
-    source: "Encryption",
-    message: "Report encrypted and saved successfully",
-  },
-  {
-    id: "6",
-    timestamp: new Date(Date.now() - 300000),
-    level: "info",
-    source: "ZAP",
-    message: "Spider crawl completed - 234 URLs discovered",
-  },
-];
-
 export default function Logs() {
-  const [logs] = useState<LogEntry[]>(mockLogs);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [password, setPassword] = useState("");
@@ -91,6 +50,78 @@ export default function Logs() {
   const [isEncrypted, setIsEncrypted] = useState(false);
   const [decryptedContent, setDecryptedContent] = useState<string>("");
   const { toast } = useToast();
+  const [encMetrics, setEncMetrics] = useState<Array<{ id: string; start: Date; end: Date; durationMs: number; sizeKB: number }>>(() => {
+    try {
+      const s = localStorage.getItem('logs_enc_metrics');
+      return s ? JSON.parse(s).map((m: any) => ({ ...m, start: new Date(m.start), end: new Date(m.end) })) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [ciphertexts, setCiphertexts] = useState<EncryptedData[]>(() => {
+    try { return getEncryptedLogs(); } catch { return []; }
+  });
+  const [showCiphertext, setShowCiphertext] = useState<boolean>(false);
+  const [decMetrics, setDecMetrics] = useState<Array<{ id: string; start: Date; end: Date; durationMs: number; sizeKB?: number }>>(() => {
+    try {
+      const s = localStorage.getItem('logs_dec_metrics');
+      return s ? JSON.parse(s).map((m: any) => ({ ...m, start: new Date(m.start), end: new Date(m.end) })) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    let aborted = false;
+    (async () => {
+      try {
+        const r = await fetch('http://localhost:3001/api/runs?limit=200').then(res => res.json()).catch(() => null);
+        if (!aborted && r && Array.isArray(r.runs)) {
+          const entries: LogEntry[] = [];
+          for (const run of r.runs) {
+            const startedAt = run.startTime ? new Date(run.startTime) : new Date();
+            const source = (run.tool || 'system').toString();
+            const target = run.tool === 'sqlmap' ? (run.params?.targetUrl || '')
+              : run.tool === 'hydra' ? (run.params?.target || '')
+              : run.tool === 'john' ? (run.params?.hashFile || '')
+              : run.tool === 'zap' ? (run.params?.target || '')
+              : run.tool === 'nmap' || run.tool === 'network-scan' ? (run.params?.args || []).join(' ')
+              : (run.params?.target || '');
+            entries.push({
+              id: `${run.id}-start`,
+              timestamp: startedAt,
+              level: 'info',
+              source,
+              message: `Started ${source}${target ? ` on ${target}` : ''}`,
+            });
+            if (run.status === 'success' || run.endTime) {
+              entries.push({
+                id: `${run.id}-done`,
+                timestamp: run.endTime ? new Date(run.endTime) : startedAt,
+                level: run.status === 'error' ? 'error' : 'success',
+                source,
+                message: run.status === 'error' ? `Failed ${source}` : `Completed ${source}`,
+              });
+            } else if (run.status === 'error') {
+              entries.push({
+                id: `${run.id}-fail`,
+                timestamp: startedAt,
+                level: 'error',
+                source,
+                message: `Failed ${source}`,
+              });
+            }
+          }
+          // Sort newest first
+          entries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+          setLogs(entries);
+        }
+      } finally {
+        if (!aborted) setLoading(false);
+      }
+    })();
+    return () => { aborted = true; };
+  }, []);
 
   const getLogIcon = (level: string) => {
     switch (level) {
@@ -130,12 +161,32 @@ export default function Logs() {
       return;
     }
 
+    const started = new Date();
+    const t0 = performance.now();
     const logsData = JSON.stringify(filteredLogs, null, 2);
     const encrypted = encryptLog(logsData, password);
     saveEncryptedLog(encrypted);
+    const t1 = performance.now();
+    const ended = new Date();
+    setEncMetrics(prev => {
+      const next = [
+        ...prev,
+        {
+          id: `${started.getTime()}`,
+          start: started,
+          end: ended,
+          durationMs: t1 - t0,
+          sizeKB: logsData.length / 1024,
+        }
+      ];
+      localStorage.setItem('logs_enc_metrics', JSON.stringify(next));
+      return next;
+    });
     
     setIsEncrypted(true);
     setPassword("");
+    setCiphertexts(prev => [...prev, encrypted]);
+    setShowCiphertext(true);
     toast({
       title: "Success",
       description: "Logs encrypted and saved to cypted folder",
@@ -163,10 +214,39 @@ export default function Logs() {
     }
 
     const latestLog = encryptedLogs[encryptedLogs.length - 1];
+    const started = new Date();
+    const t0 = performance.now();
     const decrypted = decryptLog(latestLog, decryptPassword);
+    const t1 = performance.now();
+    const ended = new Date();
 
     if (decrypted) {
       setDecryptedContent(decrypted);
+      setDecMetrics(prev => {
+        const next = [
+          ...prev,
+          {
+            id: `${started.getTime()}`,
+            start: started,
+            end: ended,
+            durationMs: t1 - t0,
+            sizeKB: latestLog.ciphertext.length / 1024,
+          }
+        ];
+        localStorage.setItem('logs_dec_metrics', JSON.stringify(next));
+        return next;
+      });
+      // Remove the just-decrypted ciphertext from storage and UI
+      try {
+        const existing = getEncryptedLogs();
+        const filtered = existing.filter(
+          (e) => !(e.ciphertext === latestLog.ciphertext && e.timestamp === latestLog.timestamp)
+        );
+        localStorage.setItem('cypted_logs', JSON.stringify(filtered));
+        setCiphertexts(filtered);
+      } catch {}
+      // Hide ciphertext section after any successful decrypt
+      setShowCiphertext(false);
       toast({
         title: "Success",
         description: "Logs decrypted successfully",
@@ -190,13 +270,13 @@ export default function Logs() {
     });
   };
 
-  const filteredLogs = logs.filter((log) => {
+  const filteredLogs = useMemo(() => logs.filter((log) => {
     const matchesFilter = filter === "all" || log.level === filter;
     const matchesSearch =
       log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.source.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesFilter && matchesSearch;
-  });
+  }), [logs, filter, searchTerm]);
 
   return (
     <div className="p-6 space-y-6">
@@ -312,6 +392,26 @@ export default function Logs() {
                 Logs Encrypted
               </Badge>
             )}
+
+      {/* Ciphertext (latest) */}
+      {showCiphertext && ciphertexts.length > 0 && (
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">Ciphertext</CardTitle>
+            <CardDescription>Latest encrypted payload (frontend only)</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <ScrollArea className="h-[200px]">
+              <pre className="text-xs break-all whitespace-pre-wrap p-4 rounded-lg bg-secondary/30">
+                {ciphertexts[ciphertexts.length - 1].ciphertext}
+              </pre>
+            </ScrollArea>
+            <div className="text-xs text-muted-foreground">
+              Timestamp: {new Date(ciphertexts[ciphertexts.length - 1].timestamp).toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
           </CardContent>
         </Card>
 
@@ -368,6 +468,130 @@ export default function Logs() {
         </Card>
       )}
 
+      {/* Decryption Metrics */}
+      {decMetrics.length > 0 && (
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Decryption Metrics
+            </CardTitle>
+            <CardDescription>Time and size per decryption</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={decMetrics.map((m, i) => ({ idx: i + 1, duration: Math.round(m.durationMs) }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="idx" />
+                    <YAxis label={{ value: 'ms', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="duration" name="Duration (ms)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={decMetrics.map((m, i) => ({ idx: i + 1, size: Number((m.sizeKB || 0).toFixed(2)) }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="idx" />
+                    <YAxis label={{ value: 'KB', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="size" name="Payload Size (KB)" fill="#06b6d4" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Start</TableHead>
+                    <TableHead>End</TableHead>
+                    <TableHead>Duration</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {decMetrics.map((m, i) => (
+                    <TableRow key={m.id}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.start.toLocaleTimeString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.end.toLocaleTimeString()}</TableCell>
+                      <TableCell>{Math.round(m.durationMs)} ms</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Encryption Metrics */}
+      {encMetrics.length > 0 && (
+        <Card className="glass-panel">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Encryption Metrics
+            </CardTitle>
+            <CardDescription>Time and size per encryption</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={encMetrics.map((m, i) => ({ idx: i + 1, duration: Math.round(m.durationMs) }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="idx" />
+                    <YAxis label={{ value: 'ms', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="duration" name="Duration (ms)" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={encMetrics.map((m, i) => ({ idx: i + 1, size: Number(m.sizeKB.toFixed(2)) }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="idx" />
+                    <YAxis label={{ value: 'KB', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="size" name="Payload Size (KB)" fill="#22c55e" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Start</TableHead>
+                    <TableHead>End</TableHead>
+                    <TableHead>Duration</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {encMetrics.map((m, i) => (
+                    <TableRow key={m.id}>
+                      <TableCell>{i + 1}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.start.toLocaleTimeString()}</TableCell>
+                      <TableCell className="text-muted-foreground">{m.end.toLocaleTimeString()}</TableCell>
+                      <TableCell>{Math.round(m.durationMs)} ms</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <Card className="glass-panel">
         <CardContent className="pt-6">
@@ -406,7 +630,7 @@ export default function Logs() {
             Activity Logs
           </CardTitle>
           <CardDescription>
-            Showing {filteredLogs.length} of {logs.length} log entries
+            Showing {filteredLogs.length} of {logs.length} log entries {loading ? '(loading…)': ''}
           </CardDescription>
         </CardHeader>
         <CardContent>

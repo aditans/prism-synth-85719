@@ -17,7 +17,18 @@ const Tools = () => {
   const navigate = useNavigate();
 
   const handleToolClick = (toolId: string) => {
-    navigate(`/tools/${toolId}`);
+    // Special case for tools that have their own dedicated pages
+    const toolRoutes: Record<string, string> = {
+      nmap: '/tools/nmap',
+      dvwa: '/tools/dvwa',
+      hydra: '/tools/hydra',
+      sqlmap: '/tools/sqlmap',
+      wireshark: '/tools/wireshark',
+      john: '/tools/john'
+    };
+    
+    const route = toolRoutes[toolId] || `/tools/${toolId}`;
+    navigate(route);
   };
 
   const tools: Tool[] = [
@@ -37,14 +48,7 @@ const Tools = () => {
       status: "ready",
       category: "Web Security",
     },
-    {
-      id: "burp",
-      name: "Burp Suite",
-      description: "Web vulnerability scanner and proxy",
-      icon: Wifi,
-      status: "ready",
-      category: "Web Security",
-    },
+    
     {
       id: "hydra",
       name: "Hydra",
@@ -58,25 +62,10 @@ const Tools = () => {
       name: "SQLMap",
       description: "Automatic SQL injection tool",
       icon: Network,
-      status: "running",
-      category: "Exploitation",
-    },
-    {
-      id: "ettercap",
-      name: "Ettercap",
-      description: "Network traffic interception and sniffing",
-      icon: PackageOpen,
-      status: "ready",
-      category: "Network",
-    },
-    {
-      id: "msfvenom",
-      name: "MSFvenom",
-      description: "Payload generation and encoding",
-      icon: Play,
       status: "ready",
       category: "Exploitation",
     },
+    
     {
       id: "dvwa",
       name: "DVWA",
@@ -85,30 +74,7 @@ const Tools = () => {
       status: "ready",
       category: "Web Security",
     },
-    {
-      id: "zap",
-      name: "OWASP ZAP",
-      description: "Web application security scanner and proxy",
-      icon: Zap,
-      status: "ready",
-      category: "Web Security",
-    },
-    {
-      id: "sqlmap",
-      name: "SQLMap",
-      description: "Automatic SQL injection and database takeover tool",
-      icon: Database,
-      status: "ready",
-      category: "Exploitation",
-    },
-    {
-      id: "metasploit",
-      name: "Metasploit",
-      description: "Penetration testing framework",
-      icon: Terminal,
-      status: "ready",
-      category: "Exploitation",
-    },
+
     {
       id: "wireshark",
       name: "Wireshark",
@@ -118,22 +84,6 @@ const Tools = () => {
       category: "Network",
     },
     {
-      id: "burpsuite",
-      name: "Burp Suite",
-      description: "Web vulnerability scanner and proxy",
-      icon: Bug,
-      status: "ready",
-      category: "Web Security",
-    },
-    {
-      id: "nikto",
-      name: "Nikto",
-      description: "Web server scanner",
-      icon: Eye,
-      status: "ready",
-      category: "Web Security",
-    },
-    {
       id: "john",
       name: "John the Ripper",
       description: "Password cracker",
@@ -141,46 +91,7 @@ const Tools = () => {
       status: "ready",
       category: "Password Cracking",
     },
-    {
-      id: "hydra",
-      name: "THC Hydra",
-      description: "Network logon cracker",
-      icon: Cpu,
-      status: "ready",
-      category: "Password Cracking",
-    },
-    {
-      id: "nmap",
-      name: "Nmap",
-      description: "Network discovery and security auditing",
-      icon: Shield,
-      status: "ready",
-      category: "Network",
-    },
-    {
-      id: "wpscan",
-      name: "WPScan",
-      description: "WordPress vulnerability scanner",
-      icon: Code,
-      status: "ready",
-      category: "Web Security",
-    },
-    {
-      id: "gobuster",
-      name: "GoBuster",
-      description: "Directory/file & DNS busting tool",
-      icon: BarChart2,
-      status: "ready",
-      category: "Web Security",
-    },
-    {
-      id: "aircrack",
-      name: "Aircrack-ng",
-      description: "WiFi security auditing tools",
-      icon: WifiOff,
-      status: "ready",
-      category: "Wireless",
-    },
+
   ];
 
   const categories = ["All", "Web Security", "Network", "Exploitation", "Password Cracking", "Wireless"];

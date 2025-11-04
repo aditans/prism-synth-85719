@@ -37,33 +37,7 @@ interface TargetData {
 }
 
 const mockTargets: TargetData[] = [
-  {
-    id: "1",
-    name: "Internal Web Server",
-    host: "10.0.2.15",
-    type: "ip",
-    status: "active",
-    lastScan: "2h ago",
-    findings: 12,
-  },
-  {
-    id: "2",
-    name: "DVWA Local",
-    host: "dvwa.local",
-    type: "domain",
-    status: "active",
-    lastScan: "15m ago",
-    findings: 23,
-  },
-  {
-    id: "3",
-    name: "Test Server",
-    host: "192.168.1.100",
-    type: "ip",
-    status: "inactive",
-    lastScan: "1d ago",
-    findings: 5,
-  },
+ 
 ];
 
 export default function Targets() {

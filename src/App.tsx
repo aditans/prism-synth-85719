@@ -19,6 +19,11 @@ import NotFound from "./pages/NotFound";
 import { NmapScanner } from "./pages/tools/NmapScanner";
 import NetworkScanPage from "./pages/NetworkScanPage";
 import { DVWAService } from "./pages/tools/DVWAService";
+import HydraTool from "./pages/tools/HydraTool";
+import SQLMapTool from "./pages/tools/sqlmap/SQLMapTool";
+import ZAPTool from "./pages/tools/zap/ZAPTool";
+import WiresharkTool from "./pages/tools/wireshark/WiresharkTool";
+import JohnTool from "./pages/tools/john/JohnTool";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +48,11 @@ const App = () => (
             <Route path="/about" element={<About />} />
             <Route path="/tools/nmap" element={<NmapScanner />} />
             <Route path="/tools/dvwa" element={<DVWAService />} />
+            <Route path="/tools/hydra" element={<HydraTool />} />
+            <Route path="/tools/sqlmap" element={<SQLMapTool />} />
+            <Route path="/tools/wireshark" element={<WiresharkTool />} />
+            <Route path="/tools/john" element={<JohnTool />} />
+            <Route path="/tools/zap" element={<ZAPTool />} />
             <Route path="/network-scan" element={<NetworkScanPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

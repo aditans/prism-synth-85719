@@ -30,8 +30,6 @@ const navigationItems = [
   { title: "Targets", url: "/targets", icon: Target },
   { title: "Tools", url: "/tools", icon: Shield },
   { title: "Scans", url: "/scans", icon: Play },
-  { title: "Reports", url: "/reports", icon: FileText },
-  { title: "Sandbox", url: "/sandbox", icon: Box },
   { title: "AI Assistant", url: "/ai", icon: Bot },
   { title: "Encryption Test", url: "/test/encryption", icon: Lock },
   { title: "Logs", url: "/logs", icon: ScrollText },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,37 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [svcStatus, setSvcStatus] = useState<{ running: boolean; pid?: number | null } | null>(null);
+  const [svcBusy, setSvcBusy] = useState(false);
+
+  const fetchStatus = async () => {
+    try {
+      const r = await fetch('http://localhost:3001/api/ai/python/status');
+      if (r.ok) {
+        const j = await r.json();
+        setSvcStatus({ running: !!j.running, pid: j.pid || null });
+      } else {
+        setSvcStatus({ running: false, pid: null });
+      }
+    } catch {
+      setSvcStatus({ running: false, pid: null });
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const startService = async () => {
+    setSvcBusy(true);
+    try {
+      await fetch('http://localhost:3001/api/ai/python/start', { method: 'POST' });
+      // give it a moment to boot then check
+      setTimeout(fetchStatus, 1000);
+    } finally {
+      setSvcBusy(false);
+    }
+  };
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -58,19 +89,40 @@ export default function AIAssistant() {
     setMessages([...messages, userMessage]);
     setInput("");
     setIsTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Based on your target, I recommend running a comprehensive Nmap scan with version detection and OS fingerprinting. This will help identify open ports and services.",
-        timestamp: new Date(),
-        suggestedCommand: "nmap -sV -O -p- --min-rate 1000 10.0.2.15",
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-      setIsTyping(false);
-    }, 2000);
+    (async () => {
+      try {
+        const convo = [...messages, userMessage].map(m => ({ role: m.role, content: m.content }));
+        const resp = await fetch('http://127.0.0.1:7070/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: convo, model: 'mistral-small-latest', temperature: 0.3 })
+        });
+        let content = '';
+        if (resp.ok) {
+          const data = await resp.json();
+          content = data?.content || '';
+        } else {
+          content = `Error: ${(await resp.text()) || 'Failed to reach AI service'}`;
+        }
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: content || "(No response)",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiMessage]);
+      } catch (e: any) {
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: `Error: ${String(e?.message || e)}`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, aiMessage]);
+      } finally {
+        setIsTyping(false);
+      }
+    })();
   };
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -91,14 +143,19 @@ export default function AIAssistant() {
                 <div>
                   <CardTitle>AI Assistant</CardTitle>
                   <CardDescription className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                    Powered by Lovable AI
+                    <span className="inline-block w-2 h-2 rounded-full bg-success animate-pulse" />
+                    Powered by Mistral
                   </CardDescription>
                 </div>
               </div>
-              <Button variant="ghost" size="icon">
-                <RefreshCw className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={fetchStatus}>
+                  <RefreshCw className="w-3 h-3 mr-1" /> Status
+                </Button>
+                <Button size="sm" onClick={startService} disabled={svcBusy || (svcStatus?.running ?? false)}>
+                  {svcBusy ? 'Starting…' : (svcStatus?.running ? 'Running' : 'Start AI Service')}
+                </Button>
+              </div>
             </div>
           </CardHeader>
 
@@ -127,7 +184,7 @@ export default function AIAssistant() {
                       )}
                     </div>
                     <div
-                      className={`flex-1 space-y-2 ${
+                      className={`flex-1 space-y-2 flex flex-col ${
                         message.role === "user" ? "items-end" : ""
                       }`}
                     >
@@ -138,7 +195,7 @@ export default function AIAssistant() {
                             : "bg-secondary"
                         }`}
                       >
-                        <p className="text-sm">{message.content}</p>
+                        <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
                       </div>
 
                       {message.suggestedCommand && (
